@@ -54,46 +54,43 @@ export function createSkillMcpManager(): SkillMcpManager {
     return `${info.sessionID}:${info.skillName}:${info.serverName}`
   }
 
-  const registerProcessCleanup = (): void => {
-    if (cleanupRegistered) {
-      return
-    }
+  let shuttingDown = false
 
+  const cleanup = async (): Promise<void> => {
+    if (shuttingDown) return
+    shuttingDown = true
+
+    const allClients = Array.from(clients.values())
+    clients.clear()
+    pendingConnections.clear()
+
+    for (const managed of allClients) {
+      try {
+        await managed.client.close()
+      } catch {
+        // Ignore cleanup errors
+      }
+      try {
+        await managed.transport.close()
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  }
+
+  const registerProcessCleanup = (): void => {
+    if (cleanupRegistered) return
     cleanupRegistered = true
 
-    const cleanup = async () => {
-      for (const [, managed] of clients) {
-        try {
-          await managed.client.close()
-        } catch {
-          // Ignore cleanup errors
-        }
-        try {
-          await managed.transport.close()
-        } catch {
-          // Ignore cleanup errors
-        }
-      }
-      clients.clear()
-      pendingConnections.clear()
-    }
-
-    process.on('SIGINT', async () => {
+    const onSignal = async (): Promise<void> => {
       await cleanup()
       process.exit(0)
-    })
-
-    process.on('SIGTERM', async () => {
-      await cleanup()
-      process.exit(0)
-    })
-
-    if (process.platform === 'win32') {
-      process.on('SIGBREAK', async () => {
-        await cleanup()
-        process.exit(0)
-      })
     }
+
+    process.on('SIGINT', onSignal)
+    process.on('SIGTERM', onSignal)
+    // SIGBREAK on Windows is equivalent to SIGTERM
+    process.on('SIGBREAK', onSignal)
   }
 
   const createClient = async (
