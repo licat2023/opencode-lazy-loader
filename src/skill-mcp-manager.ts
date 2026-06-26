@@ -238,7 +238,7 @@ export function createSkillMcpManager(): SkillMcpManager {
     }
 
     cleanupInterval = setInterval(() => {
-      cleanupIdleClients()
+      cleanupIdleClients().catch((e) => debugLog(`cleanupIdleClients: ${e}`))
     }, 60000)
 
     cleanupInterval.unref()
