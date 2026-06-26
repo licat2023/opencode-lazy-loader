@@ -45,21 +45,34 @@ export function createCleanMcpEnvironment(
 ): Record<string, string> {
   const baseEnv: Record<string, string> = {}
   
-  // Copy essential environment variables
+  const isWin = process.platform === 'win32'
+
   const essentialVars = [
     'PATH',
+    'NODE_ENV',
+    'npm_config_registry',
+    'npm_config_cache',
+    // Unix
     'HOME',
     'USER',
     'SHELL',
     'TERM',
-    'NODE_ENV',
     'TMPDIR',
     'LANG',
     'LC_ALL',
-    'npm_config_registry',
-    'npm_config_cache'
+    // Windows
+    ...(isWin ? [
+      'APPDATA',
+      'LOCALAPPDATA',
+      'USERPROFILE',
+      'SystemRoot',
+      'ComSpec',
+      'TEMP',
+      'TMP',
+      'PATHEXT'
+    ] : [])
   ]
-  
+
   for (const varName of essentialVars) {
     if (process.env[varName]) {
       baseEnv[varName] = process.env[varName]!
