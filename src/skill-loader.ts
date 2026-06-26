@@ -3,6 +3,7 @@ import { join, basename } from 'path'
 import { homedir } from 'os'
 import type { LoadedSkill, McpServerConfig, SkillScope, LazyContent } from './types.js'
 import { parseFrontmatter, parseSkillMcpConfigFromFrontmatter } from './utils/frontmatter.js'
+import { debugLog } from './utils/debug.js'
 
 /**
  * Check if a file is a markdown file
@@ -54,7 +55,8 @@ export async function loadMcpJsonFromDir(
         return parsed as unknown as Record<string, McpServerConfig>
       }
     }
-  } catch {
+  } catch (e) {
+    debugLog(`loadMcpJsonFromDir(${skillDir}): ${e}`)
     return undefined
   }
 
@@ -120,7 +122,8 @@ $ARGUMENTS
       mcpConfig,
       lazyContent
     }
-  } catch {
+  } catch (e) {
+    debugLog(`loadSkillFromPath(${skillPath}): ${e}`)
     return null
   }
 }
@@ -157,8 +160,8 @@ export async function loadSkillsFromDir(
           skills.push(skill)
         }
         continue
-      } catch {
-        // SKILL.md not found, try {dirname}.md
+      } catch (e) {
+        debugLog(`loadSkillsFromDir: SKILL.md not found in ${resolvedPath}: ${e}`)
       }
 
       // Try {dirname}.md
@@ -170,8 +173,8 @@ export async function loadSkillsFromDir(
           skills.push(skill)
         }
         continue
-      } catch {
-        // Named skill file not found
+      } catch (e) {
+        debugLog(`loadSkillsFromDir: named skill file not found: ${namedSkillMdPath}: ${e}`)
       }
 
       continue

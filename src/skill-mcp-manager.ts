@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import type { McpClientInfo, McpContext, McpServerConfig } from './types.js'
 import { expandEnvVarsInObject, createCleanMcpEnvironment, normalizeCommand, normalizeEnv } from './utils/env-vars.js'
+import { debugLog } from './utils/debug.js'
 
 interface ManagedClient {
   client: Client
@@ -67,13 +68,13 @@ export function createSkillMcpManager(): SkillMcpManager {
     for (const managed of allClients) {
       try {
         await managed.client.close()
-      } catch {
-        // Ignore cleanup errors
+      } catch (e) {
+        debugLog(`cleanup: client.close() error: ${e}`)
       }
       try {
         await managed.transport.close()
-      } catch {
-        // Ignore cleanup errors
+      } catch (e) {
+        debugLog(`cleanup: transport.close() error: ${e}`)
       }
     }
   }
@@ -132,8 +133,8 @@ export function createSkillMcpManager(): SkillMcpManager {
     } catch (error) {
       try {
         await transport.close()
-      } catch {
-        // Ignore cleanup errors
+      } catch (e) {
+        debugLog(`createClient: transport.close() after connect failure: ${e}`)
       }
 
       const errorMessage = error instanceof Error ? error.message : String(error)
@@ -195,13 +196,13 @@ export function createSkillMcpManager(): SkillMcpManager {
         clients.delete(key)
         try {
           await managed.client.close()
-        } catch {
-          // Ignore cleanup errors
+        } catch (e) {
+          debugLog(`disconnectSession: client.close() error: ${e}`)
         }
         try {
           await managed.transport.close()
-        } catch {
-          // Ignore cleanup errors
+        } catch (e) {
+          debugLog(`disconnectSession: transport.close() error: ${e}`)
         }
       }
     }
@@ -216,13 +217,13 @@ export function createSkillMcpManager(): SkillMcpManager {
     for (const managed of allClients) {
       try {
         await managed.client.close()
-      } catch {
-        // Ignore cleanup errors
+      } catch (e) {
+        debugLog(`disconnectAll: client.close() error: ${e}`)
       }
       try {
         await managed.transport.close()
-      } catch {
-        // Ignore cleanup errors
+      } catch (e) {
+        debugLog(`disconnectAll: transport.close() error: ${e}`)
       }
     }
   }
@@ -254,13 +255,13 @@ export function createSkillMcpManager(): SkillMcpManager {
         clients.delete(key)
         try {
           await managed.client.close()
-        } catch {
-          // Ignore cleanup errors
+        } catch (e) {
+          debugLog(`cleanupIdleClients: client.close() error: ${e}`)
         }
         try {
           await managed.transport.close()
-        } catch {
-          // Ignore cleanup errors
+        } catch (e) {
+          debugLog(`cleanupIdleClients: transport.close() error: ${e}`)
         }
       }
     }
@@ -279,13 +280,13 @@ export function createSkillMcpManager(): SkillMcpManager {
         clients.delete(key)
         try {
           await existing.client.close()
-        } catch {
-          // Ignore
+        } catch (e) {
+          debugLog(`getOrCreateClientWithRetry: client.close() error: ${e}`)
         }
         try {
           await existing.transport.close()
-        } catch {
-          // Ignore
+        } catch (e) {
+          debugLog(`getOrCreateClientWithRetry: transport.close() error: ${e}`)
         }
         return await getOrCreateClient(info, config)
       }

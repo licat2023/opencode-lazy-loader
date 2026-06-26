@@ -1,5 +1,6 @@
 import * as yaml from 'js-yaml'
 import type { ParsedFrontmatter, SkillFrontmatter, McpServerConfig } from '../types.js'
+import { debugLog } from './debug.js'
 
 /**
  * Parse YAML frontmatter from markdown content
@@ -18,7 +19,8 @@ export function parseFrontmatter(content: string): ParsedFrontmatter {
     const data = yaml.load(frontmatterMatch[1]) as SkillFrontmatter
     const body = content.slice(frontmatterMatch[0].length).trim()
     return { data: data || {}, body }
-  } catch {
+  } catch (e) {
+    debugLog(`parseFrontmatter: invalid YAML: ${e}`)
     return {
       data: {},
       body: content
@@ -43,7 +45,8 @@ export function parseSkillMcpConfigFromFrontmatter(
     if (parsed && typeof parsed === 'object' && 'mcp' in parsed && parsed.mcp) {
       return parsed.mcp
     }
-  } catch {
+  } catch (e) {
+    debugLog(`parseSkillMcpConfigFromFrontmatter: invalid YAML: ${e}`)
     return undefined
   }
 
