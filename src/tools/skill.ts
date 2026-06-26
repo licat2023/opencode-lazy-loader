@@ -1,5 +1,6 @@
 import { tool, type ToolDefinition } from '@opencode-ai/plugin/tool'
 import { dirname } from 'path'
+import { readFileSync } from 'fs'
 import type { LoadedSkill, McpServerConfig } from '../types.js'
 import type { SkillMcpManager } from '../skill-mcp-manager.js'
 import { parseFrontmatter } from '../utils/frontmatter.js'
@@ -69,7 +70,6 @@ async function extractSkillBody(skill: LoadedSkill): Promise<string> {
   }
 
   if (skill.path) {
-    const { readFileSync } = await import('fs')
     const content = readFileSync(skill.path, 'utf-8')
     const { body } = parseFrontmatter(content)
     return body.trim()

@@ -1,6 +1,7 @@
 import { tool, type ToolDefinition } from '@opencode-ai/plugin/tool'
 import type { LoadedSkill, McpServerConfig } from '../types.js'
 import type { SkillMcpManager } from '../skill-mcp-manager.js'
+import { debugLog } from '../utils/debug.js'
 
 const SKILL_MCP_DESCRIPTION = 
   `Invoke MCP server operations from skill-embedded MCPs. Requires mcp_name plus exactly one of: tool_name, resource_name, or prompt_name.`
@@ -128,7 +129,8 @@ function applyGrepFilter(output: string, pattern?: string): string {
     return filtered.length > 0
       ? filtered.join('\n')
       : `[grep] No lines matched pattern: ${pattern}`
-  } catch {
+  } catch (e) {
+    debugLog(`applyGrepFilter: invalid regex "${pattern}": ${e}`)
     return output
   }
 }

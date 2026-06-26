@@ -17,8 +17,8 @@ function getPluginsFromConfigFile(): string[] | null {
     return null
   }
   
-  // Expand ~ to home dir
-  const expandedPath = configPath.replace(/^~/, process.env.HOME || '')
+  const homeDir = process.env.HOME || process.env.USERPROFILE || ''
+  const expandedPath = configPath.replace(/^~/, homeDir)
   
   if (!existsSync(expandedPath)) {
     debugLog(`Config file not found: ${expandedPath}`)
