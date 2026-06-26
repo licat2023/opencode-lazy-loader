@@ -190,20 +190,32 @@ export async function loadSkillsFromDir(
   return skills
 }
 
-/**
- * Discover skills from opencode global directory (~/.config/opencode/skill/)
- */
-export async function discoverOpencodeGlobalSkills(): Promise<LoadedSkill[]> {
-  const opencodeSkillsDir = join(homedir(), '.config', 'opencode', 'skills')
-  return loadSkillsFromDir(opencodeSkillsDir, 'opencode')
+const SKILL_DIR_NAMES = ['skills', 'skill']
+
+async function loadSkillsFromDirCandidates(
+  baseDir: string,
+  scope: SkillScope
+): Promise<LoadedSkill[]> {
+  const results = await Promise.all(
+    SKILL_DIR_NAMES.map((name) => loadSkillsFromDir(join(baseDir, name), scope))
+  )
+  return results.flat()
 }
 
 /**
- * Discover skills from opencode project directory (.opencode/skill/)
+ * Discover skills from opencode global directory (~/.config/opencode/skills/)
+ */
+export async function discoverOpencodeGlobalSkills(): Promise<LoadedSkill[]> {
+  const opencodeConfigDir = join(homedir(), '.config', 'opencode')
+  return loadSkillsFromDirCandidates(opencodeConfigDir, 'opencode')
+}
+
+/**
+ * Discover skills from opencode project directory (.opencode/skills/)
  */
 export async function discoverOpencodeProjectSkills(): Promise<LoadedSkill[]> {
-  const opencodeProjectDir = join(process.cwd(), '.opencode', 'skills')
-  return loadSkillsFromDir(opencodeProjectDir, 'opencode-project')
+  const opencodeProjectDir = join(process.cwd(), '.opencode')
+  return loadSkillsFromDirCandidates(opencodeProjectDir, 'opencode-project')
 }
 
 /**

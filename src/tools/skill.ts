@@ -30,17 +30,23 @@ function loadedSkillToInfo(skill: LoadedSkill): SkillInfo {
   }
 }
 
-/**
- * Format skills as XML for tool description
- */
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
 function formatSkillsXml(skills: SkillInfo[]): string {
   if (skills.length === 0) return ''
 
   const skillsXml = skills.map((skill) => {
     return [
       '  <skill>',
-      `    <name>${skill.name}</name>`,
-      `    <description>${skill.description}</description>`,
+      `    <name>${escapeXml(skill.name)}</name>`,
+      `    <description>${escapeXml(skill.description)}</description>`,
       '  </skill>'
     ].join('\n')
   }).join('\n')
