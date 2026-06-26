@@ -1,5 +1,7 @@
 import type { Plugin } from '@opencode-ai/plugin'
-import { appendFileSync, readFileSync, existsSync } from 'fs'
+import { appendFileSync, readFileSync, existsSync, mkdirSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import { createSkillMcpManager } from './skill-mcp-manager.js'
 import { discoverSkills } from './skill-loader.js'
 import { createSkillTool } from './tools/skill.js'
@@ -7,10 +9,12 @@ import { createSkillMcpTool } from './tools/skill-mcp.js'
 import type { LoadedSkill } from './types.js'
 
 const DEBUG_LOG = process.env.OPENCODE_LAZY_LOADER_DEBUG === '1'
+const LOG_PATH = join(tmpdir(), 'opencode-lazy-loader.log')
 function debugLog(msg: string) {
   if (DEBUG_LOG) {
+    try { mkdirSync(tmpdir(), { recursive: true }) } catch { }
     const line = `[${new Date().toISOString()}] ${msg}\n`
-    appendFileSync('/tmp/opencode-lazy-loader.log', line)
+    appendFileSync(LOG_PATH, line)
   }
 }
 
