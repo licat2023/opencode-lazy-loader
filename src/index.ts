@@ -1,10 +1,10 @@
 import type { Plugin } from '@opencode-ai/plugin'
 import { readFileSync, existsSync } from 'fs'
 import { createSkillMcpManager } from './skill-mcp-manager.js'
-import { discoverSkills } from './skill-loader.js'
-import { createSkillTool } from './tools/skill.js'
+import { loadMcpConfigFromSkillDir } from './skill-loader.js'
+import { formatMcpCapabilities } from './tools/skill.js'
 import { createSkillMcpTool } from './tools/skill-mcp.js'
-import type { LoadedSkill } from './types.js'
+import type { McpServerConfig } from './types.js'
 import { debugLog } from './utils/debug.js'
 
 /**
@@ -52,6 +52,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   ])
 }
 
+type ServerEntry = { config: McpServerConfig; skillName: string; skillDir: string }
+
 export const OpenCodeEmbeddedSkillMcp: Plugin = async ({ client }) => {
   debugLog('Plugin initializing...')
   
@@ -86,42 +88,55 @@ export const OpenCodeEmbeddedSkillMcp: Plugin = async ({ client }) => {
   } else {
     debugLog('FORCE mode enabled, skipping conflict check')
   }
+
   const manager = createSkillMcpManager()
-  let loadedSkills: LoadedSkill[] = []
+  const serverMap = new Map<string, ServerEntry>()
   let currentSessionID: string | null = null
 
-  // Discover skills on initialization
-  try {
-    loadedSkills = await discoverSkills()
-  } catch (e) {
-    debugLog(`discoverSkills failed: ${e}`)
-    loadedSkills = []
-  }
-
   return {
-    // Handle session lifecycle events
     event: async ({ event }) => {
       if (event.type === 'session.created') {
         currentSessionID = event.properties.info.id
       }
       
       if (event.type === 'session.deleted' && currentSessionID) {
-        // Cleanup MCP connections for the deleted session
         await manager.disconnectSession(currentSessionID)
+        serverMap.clear()
         currentSessionID = null
       }
     },
 
-    // Register tools
+    "tool.execute.after": async (input, output) => {
+      if (input.tool !== "skill") return
+
+      const meta = output.metadata as Record<string, unknown> | undefined
+      const skillName = meta?.name as string | undefined
+      const dir = meta?.dir as string | undefined
+      if (!dir || !skillName) return
+
+      const mcpConfig = await loadMcpConfigFromSkillDir(dir)
+      if (!mcpConfig || Object.keys(mcpConfig).length === 0) return
+
+      for (const [serverName, config] of Object.entries(mcpConfig)) {
+        const cfg = config as McpServerConfig
+        serverMap.set(serverName, { config: cfg, skillName, skillDir: dir })
+      }
+
+      const mcpInfo = await formatMcpCapabilities(
+        { name: skillName, mcpConfig },
+        manager,
+        currentSessionID || 'unknown'
+      )
+
+      if (mcpInfo) {
+        output.output = (output.output ?? '') + mcpInfo
+      }
+    },
+
     tool: {
-      skill: createSkillTool({
-        skills: loadedSkills,
-        mcpManager: manager,
-        getSessionID: () => currentSessionID || 'unknown'
-      }),
       skill_mcp: createSkillMcpTool({
         manager,
-        getLoadedSkills: () => loadedSkills,
+        getServerMap: () => serverMap,
         getSessionID: () => currentSessionID || 'unknown'
       })
     }
@@ -132,6 +147,5 @@ export const OpenCodeEmbeddedSkillMcp: Plugin = async ({ client }) => {
 export default OpenCodeEmbeddedSkillMcp
 
 // Re-export types for external use
-export type { LoadedSkill, McpServerConfig, SkillScope } from './types.js'
-export { discoverSkills } from './skill-loader.js'
+export type { McpServerConfig } from './types.js'
 export { createSkillMcpManager } from './skill-mcp-manager.js'

@@ -1,7 +1,9 @@
 import { tool, type ToolDefinition } from '@opencode-ai/plugin/tool'
-import type { LoadedSkill, McpServerConfig } from '../types.js'
+import type { McpServerConfig } from '../types.js'
 import type { SkillMcpManager } from '../skill-mcp-manager.js'
 import { debugLog } from '../utils/debug.js'
+
+type ServerEntry = { config: McpServerConfig; skillName: string }
 
 const SKILL_MCP_DESCRIPTION = 
   `Invoke MCP server operations from skill-embedded MCPs. Requires mcp_name plus exactly one of: tool_name, resource_name, or prompt_name.`
@@ -59,35 +61,13 @@ function validateOperationParams(args: {
 }
 
 /**
- * Find an MCP server configuration by name across all skills
- */
-function findMcpServer(
-  mcpName: string,
-  skills: LoadedSkill[]
-): { skill: LoadedSkill; config: McpServerConfig } | null {
-  for (const skill of skills) {
-    if (skill.mcpConfig && mcpName in skill.mcpConfig) {
-      return { skill, config: skill.mcpConfig[mcpName] }
-    }
-  }
-  return null
-}
-
-/**
  * Format available MCPs for error message
  */
-function formatAvailableMcps(skills: LoadedSkill[]): string {
-  const mcps: string[] = []
-
-  for (const skill of skills) {
-    if (skill.mcpConfig) {
-      for (const serverName of Object.keys(skill.mcpConfig)) {
-        mcps.push(`  - "${serverName}" from skill "${skill.name}"`)
-      }
-    }
-  }
-
-  return mcps.length > 0 ? mcps.join('\n') : '  (none found)'
+function formatAvailableMcps(serverMap: Map<string, ServerEntry>): string {
+  if (serverMap.size === 0) return '  (none found)'
+  return Array.from(serverMap.entries())
+    .map(([name, entry]) => `  - "${name}" from skill "${entry.skillName}"`)
+    .join('\n')
 }
 
 /**
@@ -137,7 +117,7 @@ function applyGrepFilter(output: string, pattern?: string): string {
 
 export interface CreateSkillMcpToolOptions {
   manager: SkillMcpManager
-  getLoadedSkills: () => LoadedSkill[]
+  getServerMap: () => Map<string, ServerEntry>
   getSessionID: () => string
 }
 
@@ -145,7 +125,7 @@ export interface CreateSkillMcpToolOptions {
  * Create the skill_mcp tool
  */
 export function createSkillMcpTool(options: CreateSkillMcpToolOptions): ToolDefinition {
-  const { manager, getLoadedSkills, getSessionID } = options
+  const { manager, getServerMap, getSessionID } = options
 
   return tool({
     description: SKILL_MCP_DESCRIPTION,
@@ -161,27 +141,27 @@ export function createSkillMcpTool(options: CreateSkillMcpToolOptions): ToolDefi
     },
     async execute(args) {
       const operation = validateOperationParams(args)
-      const skills = getLoadedSkills()
-      const found = findMcpServer(args.mcp_name, skills)
+      const serverMap = getServerMap()
+      const entry = serverMap.get(args.mcp_name)
 
-      if (!found) {
+      if (!entry) {
         throw new Error(
           `MCP server "${args.mcp_name}" not found.\n\n` +
-          `Available MCP servers in loaded skills:\n` +
-          formatAvailableMcps(skills) + '\n\n' +
+          `Available MCP servers:\n` +
+          formatAvailableMcps(serverMap) + '\n\n' +
           `Hint: Load the skill first using the 'skill' tool, then call skill_mcp.`
         )
       }
 
       const info = {
         serverName: args.mcp_name,
-        skillName: found.skill.name,
+        skillName: entry.skillName,
         sessionID: getSessionID()
       }
 
       const context = {
-        config: found.config,
-        skillName: found.skill.name
+        config: entry.config,
+        skillName: entry.skillName
       }
 
       const parsedArgs = parseArguments(args.arguments)

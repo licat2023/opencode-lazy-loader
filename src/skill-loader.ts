@@ -1,33 +1,13 @@
 import { promises as fs } from 'fs'
-import { join, basename } from 'path'
-import { homedir } from 'os'
-import type { LoadedSkill, McpServerConfig, SkillScope, LazyContent } from './types.js'
-import { parseFrontmatter, parseSkillMcpConfigFromFrontmatter } from './utils/frontmatter.js'
+import { join } from 'path'
+import * as yaml from 'js-yaml'
+import type { McpServerConfig } from './types.js'
 import { debugLog } from './utils/debug.js'
-
-/**
- * Check if a file is a markdown file
- */
-function isMarkdownFile(entry: { name: string }): boolean {
-  return entry.name.endsWith('.md')
-}
-
-/**
- * Resolve symlink to its target path
- */
-async function resolveSymlinkAsync(entryPath: string): Promise<string> {
-  try {
-    const realPath = await fs.realpath(entryPath)
-    return realPath
-  } catch {
-    return entryPath
-  }
-}
 
 /**
  * Load MCP config from mcp.json file in skill directory
  */
-export async function loadMcpJsonFromDir(
+async function loadMcpJsonFromDir(
   skillDir: string
 ): Promise<Record<string, McpServerConfig> | undefined> {
   const mcpJsonPath = join(skillDir, 'mcp.json')
@@ -64,173 +44,39 @@ export async function loadMcpJsonFromDir(
 }
 
 /**
- * Load a skill from a markdown file path
+ * Extract MCP config from YAML frontmatter of a markdown string.
  */
-export async function loadSkillFromPath(
-  skillPath: string,
-  resolvedPath: string,
-  defaultName: string,
-  scope: SkillScope
-): Promise<LoadedSkill | null> {
+function parseMcpFromFrontmatter(
+  content: string
+): Record<string, McpServerConfig> | undefined {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)
+  if (!match) return undefined
   try {
-    const content = await fs.readFile(skillPath, 'utf-8')
-    const { data } = parseFrontmatter(content)
-
-    // Load MCP config from frontmatter or mcp.json
-    const frontmatterMcp = parseSkillMcpConfigFromFrontmatter(content)
-    const mcpJsonMcp = await loadMcpJsonFromDir(resolvedPath)
-    const mcpConfig = mcpJsonMcp || frontmatterMcp // mcp.json takes priority
-
-    const skillName = data.name || defaultName
-    const originalDescription = data.description || ''
-    const formattedDescription = `(${scope} - Skill) ${originalDescription}`
-
-    // Create lazy content loader
-    const lazyContent: LazyContent = {
-      loaded: false,
-      content: undefined,
-      load: async () => {
-        if (!lazyContent.loaded) {
-          const fileContent = await fs.readFile(skillPath, 'utf-8')
-          const { body } = parseFrontmatter(fileContent)
-          lazyContent.content = `<skill-instruction>
-Base directory for this skill: ${resolvedPath}/
-File references (@path) in this skill are relative to this directory.
-
-${body.trim()}
-</skill-instruction>
-
-<user-request>
-$ARGUMENTS
-</user-request>`
-          lazyContent.loaded = true
-        }
-        return lazyContent.content!
-      }
-    }
-
-    return {
-      name: skillName,
-      path: skillPath,
-      resolvedPath,
-      definition: {
-        name: skillName,
-        description: formattedDescription,
-        template: ''
-      },
-      scope,
-      mcpConfig,
-      lazyContent
+    const parsed = yaml.load(match[1]) as { mcp?: Record<string, McpServerConfig> } | undefined
+    if (parsed && typeof parsed === 'object' && 'mcp' in parsed && parsed.mcp) {
+      return parsed.mcp
     }
   } catch (e) {
-    debugLog(`loadSkillFromPath(${skillPath}): ${e}`)
-    return null
+    debugLog(`parseMcpFromFrontmatter: ${e}`)
   }
+  return undefined
 }
 
 /**
- * Load all skills from a directory
+ * Load MCP config from a skill directory.
+ * Checks mcp.json first, then falls back to SKILL.md frontmatter.
  */
-export async function loadSkillsFromDir(
-  skillsDir: string,
-  scope: SkillScope
-): Promise<LoadedSkill[]> {
-  const entries = await fs.readdir(skillsDir, { withFileTypes: true }).catch(() => [])
-  const skills: LoadedSkill[] = []
+export async function loadMcpConfigFromSkillDir(
+  skillDir: string
+): Promise<Record<string, McpServerConfig> | undefined> {
+  const jsonConfig = await loadMcpJsonFromDir(skillDir)
+  if (jsonConfig) return jsonConfig
 
-  for (const entry of entries) {
-    // Skip hidden files
-    if (entry.name.startsWith('.')) {
-      continue
-    }
-
-    const entryPath = join(skillsDir, entry.name)
-
-    // Handle directories (skill folders)
-    if (entry.isDirectory() || entry.isSymbolicLink()) {
-      const resolvedPath = await resolveSymlinkAsync(entryPath)
-      const dirName = entry.name
-
-      // Try SKILL.md first
-      const skillMdPath = join(resolvedPath, 'SKILL.md')
-      try {
-        await fs.access(skillMdPath)
-        const skill = await loadSkillFromPath(skillMdPath, resolvedPath, dirName, scope)
-        if (skill) {
-          skills.push(skill)
-        }
-        continue
-      } catch (e) {
-        debugLog(`loadSkillsFromDir: SKILL.md not found in ${resolvedPath}: ${e}`)
-      }
-
-      // Try {dirname}.md
-      const namedSkillMdPath = join(resolvedPath, `${dirName}.md`)
-      try {
-        await fs.access(namedSkillMdPath)
-        const skill = await loadSkillFromPath(namedSkillMdPath, resolvedPath, dirName, scope)
-        if (skill) {
-          skills.push(skill)
-        }
-        continue
-      } catch (e) {
-        debugLog(`loadSkillsFromDir: named skill file not found: ${namedSkillMdPath}: ${e}`)
-      }
-
-      continue
-    }
-
-    // Handle standalone markdown files
-    if (isMarkdownFile(entry)) {
-      const skillName = basename(entry.name, '.md')
-      const skill = await loadSkillFromPath(entryPath, skillsDir, skillName, scope)
-      if (skill) {
-        skills.push(skill)
-      }
-    }
+  const skillMdPath = join(skillDir, 'SKILL.md')
+  try {
+    const content = await fs.readFile(skillMdPath, 'utf-8')
+    return parseMcpFromFrontmatter(content)
+  } catch {
+    return undefined
   }
-
-  return skills
-}
-
-/**
- * Discover skills from opencode global directory (~/.config/opencode/skills/)
- */
-export async function discoverOpencodeGlobalSkills(): Promise<LoadedSkill[]> {
-  const opencodeSkillsDir = join(homedir(), '.config', 'opencode', 'skills')
-  return loadSkillsFromDir(opencodeSkillsDir, 'opencode')
-}
-
-/**
- * Discover skills from opencode project directory (.opencode/skills/)
- */
-export async function discoverOpencodeProjectSkills(): Promise<LoadedSkill[]> {
-  const opencodeProjectDir = join(process.cwd(), '.opencode', 'skills')
-  return loadSkillsFromDir(opencodeProjectDir, 'opencode-project')
-}
-
-/**
- * Discover all skills from both opencode locations
- * Priority: project > global
- */
-export async function discoverSkills(): Promise<LoadedSkill[]> {
-  const [projectSkills, globalSkills] = await Promise.all([
-    discoverOpencodeProjectSkills(),
-    discoverOpencodeGlobalSkills()
-  ])
-
-  // Project skills take priority - dedupe by name
-  const skillMap = new Map<string, LoadedSkill>()
-  
-  // Add global skills first
-  for (const skill of globalSkills) {
-    skillMap.set(skill.name, skill)
-  }
-  
-  // Project skills override global
-  for (const skill of projectSkills) {
-    skillMap.set(skill.name, skill)
-  }
-
-  return Array.from(skillMap.values())
 }
