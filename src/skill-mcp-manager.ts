@@ -191,19 +191,23 @@ export function createSkillMcpManager(): SkillMcpManager {
   }
 
   const disconnectSession = async (sessionID: string): Promise<void> => {
+    const toClose: [string, ManagedClient][] = []
     for (const [key, managed] of clients.entries()) {
       if (key.startsWith(`${sessionID}:`)) {
-        clients.delete(key)
-        try {
-          await managed.client.close()
-        } catch (e) {
-          debugLog(`disconnectSession: client.close() error: ${e}`)
-        }
-        try {
-          await managed.transport.close()
-        } catch (e) {
-          debugLog(`disconnectSession: transport.close() error: ${e}`)
-        }
+        toClose.push([key, managed])
+      }
+    }
+    for (const [key, managed] of toClose) {
+      clients.delete(key)
+      try {
+        await managed.client.close()
+      } catch (e) {
+        debugLog(`disconnectSession: client.close() error: ${e}`)
+      }
+      try {
+        await managed.transport.close()
+      } catch (e) {
+        debugLog(`disconnectSession: transport.close() error: ${e}`)
       }
     }
   }

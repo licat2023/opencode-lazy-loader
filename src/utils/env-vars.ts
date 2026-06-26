@@ -74,8 +74,9 @@ export function createCleanMcpEnvironment(
   ]
 
   for (const varName of essentialVars) {
-    if (process.env[varName]) {
-      baseEnv[varName] = process.env[varName]!
+    const val = process.env[varName]
+    if (val) {
+      baseEnv[varName] = val
     }
   }
   
